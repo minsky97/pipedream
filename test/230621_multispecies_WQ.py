@@ -16,7 +16,7 @@ sns.set_palette('viridis')
 #   Initializing the model
 ###############################################################################
 # Load the model network and parameter files
-input_path = '../data/Test_MP'
+input_path = '../data/multi_WQ'
 input_file_prefix = 'Input_C_'
 measurement_file_prefix = 'Obs_C_'
 superjunctions = pd.read_csv(f'{input_path}/superjunctions.csv')
