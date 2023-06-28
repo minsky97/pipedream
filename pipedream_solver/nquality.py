@@ -260,11 +260,6 @@ class QualityBuilder():
         self._A_ik_next = geometry_WQ1(Ix_ik, self.hydraulics._geom_codes, self.hydraulics._g1_ik, self._h_Ik_next, self._Ik, self._Ip1k, self._B_ik)
         self._A_ik_prev = self.hydraulics._A_ik
         self._Q_ik_up_next, self._Q_ik_dn_next = Q_ik_up_dn(Ix_ik, self._Ik, self._Ip1k, _dt, self._Q_ik_next, self._B_ik, self._dx_ik_next, self._h_Ik_next, self._h_Ik_prev)
-        _kI = self._kI
-        _is_start = self._is_start
-        _is_end = self._is_end
-        _forward_I_i = self._forward_I_i
-        _backward_I_i = self._backward_I_i
         _J_uk = self._J_uk
         _J_dk = self._J_dk
         self._Q_uk_up_next = np.zeros(len(self.nk))
@@ -275,9 +270,10 @@ class QualityBuilder():
         self._A_dk_next = np.zeros(len(self.nk))
         self._A_uk_prev = np.zeros(len(self.nk))
         self._A_dk_prev = np.zeros(len(self.nk))
-        N = _kI.size
-        self._Q_uk_up_next, self._Q_uk_dn_next, self._Q_dk_up_next, self._Q_dk_dn_next, self._A_uk_next, self._A_uk_prev, self._A_dk_next, self._A_dk_prev = geometry_WQ2(N,_kI, 
-               _is_start, _is_end, _forward_I_i,_backward_I_i, _J_uk, _J_dk, self._Q_uk_next, self._B_uk, self._dx_uk, self._h_Ik_next, self._h_Ik_prev,_dt, 
+        _I_1k = self._I_1k
+        _I_Np1k = self._I_Np1k
+        self._Q_uk_up_next, self._Q_uk_dn_next, self._Q_dk_up_next, self._Q_dk_dn_next, self._A_uk_next, self._A_uk_prev, self._A_dk_next, self._A_dk_prev = geometry_WQ2(_I_1k,
+               _I_Np1k, _J_uk, _J_dk, self._Q_uk_next, self._B_uk, self._dx_uk, self._h_Ik_next, self._h_Ik_prev,_dt, 
                self.hydraulics._geom_codes, self.hydraulics._g1_ik, self._H_j_next, self._z_inv_j, self._H_j_prev, self._Q_dk_next, self._B_dk, self._dx_dk,
                self._Q_uk_up_next, self._Q_uk_dn_next, self._Q_dk_up_next, self._Q_dk_dn_next,
                self._A_uk_next, self._A_dk_next, self._A_uk_prev, self._A_dk_prev)
@@ -1664,99 +1660,94 @@ def geometry_WQ1(Ix_ik, _geom_codes, _g1_ik, _h_Ik_next, _Ik, _Ip1k, _B_ik):
     else:
         raise ValueError('Geometries of conduit should be [circular] or [rect_open] in this version of WQ solver.')    
     return _A_ik_next
-#N, _KI, _is_start, _is_end, _forward_I_i, _backward_I_i, _J_uk, _J_dk, _Q_uk_next, _B_uk, _dx_uk, _h_Ik.next, _h_Ik_prev, _dt, _geom_codes, _g1_ik, _H_j_next, _z_inv_j, _H_j_prev, _Q_dk_next, _B_dk, _dx_dk
 @njit
-def geometry_WQ2(N, _kI,  _is_start, _is_end, _forward_I_i, _backward_I_i, _J_uk, _J_dk, _Q_uk_next, _B_uk, _dx_uk, 
+def geometry_WQ2(_I_1k, _I_Np1k, _J_uk, _J_dk, _Q_uk_next, _B_uk, _dx_uk, 
                  _h_Ik_next, _h_Ik_prev, _dt, _geom_codes, _g1_ik, _H_j_next, _z_inv_j, _H_j_prev, _Q_dk_next,
                  _B_dk, _dx_dk, _Q_uk_up_next, _Q_uk_dn_next, _Q_dk_up_next, _Q_dk_dn_next,
                  _A_uk_next, _A_dk_next, _A_uk_prev, _A_dk_prev):
-    for I in range(N):
-        if _is_start[I]:
-            i = _forward_I_i[I]
-            k = _kI[I]
-            _Q_uk_up_next[k] = (_Q_uk_next[k] + (0.5*_B_uk[k]*_dx_uk[k])
-                                    *(_H_j_next[_J_uk[k]] - _H_j_prev[_J_uk[k]])/_dt)
-            _Q_uk_dn_next[k] = (_Q_uk_next[k] - (0.5*_B_uk[k]*_dx_uk[k])
-                                    *(_h_Ik_next[i] - _h_Ik_prev[i])/_dt)
-            # Calculate the cross-sectional area of upstream boundary links
-            if _geom_codes[0] ==1:
-                d = _g1_ik[k]
-                y = 0.5*(_H_j_next[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_next[i])
-                if y < 0:
-                    y = 0.0
-                elif y > d:
-                    y = d
-                r = d / 2
-                phi = y / r
-                if phi < 0:
-                    phi = 0
-                elif phi > 2:
-                    phi = 2
-                theta = np.arccos(1 - phi)
-                _A_uk_next[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
-                y = 0.5*(_H_j_prev[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_prev[i])
-                if y < 0:
-                    y = 0.0
-                elif y > d:
-                    y = d
-                r = d / 2
-                phi = y / r
-                if phi < 0:
-                    phi = 0
-                elif phi > 2:
-                    phi = 2
-                theta = np.arccos(1 - phi)
-                _A_uk_prev[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
-            elif _geom_codes[0] ==3:
-                _A_uk_next[k] = (_B_uk[k]*0.5*(_H_j_next[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_next[i]))
-                _A_uk_prev[k] = (_B_uk[k]*0.5*(_H_j_prev[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_prev[i]))
-            else:
-                raise ValueError('Geometries of conduit should be [circular] or [rect_open] in this version of WQ solver.')
-                
-        elif _is_end[I]:
-            im1 = _backward_I_i[I]
-            k = _kI[I]
-            _Q_dk_up_next[k] = (_Q_dk_next[k] + (0.5*_B_dk[k]*_dx_dk[k])
-                                  *(_h_Ik_next[im1] - _h_Ik_prev[im1])/_dt)
-            _Q_dk_dn_next[k] = (_Q_dk_next[k] - (0.5*_B_dk[k]*_dx_dk[k])
-                                    *(_H_j_next[_J_dk[k]] - _H_j_prev[_J_dk[k]])/_dt)
+    
+    n = len(_I_1k)
+    for k in range(n):
+        _Q_uk_up_next[k] = (_Q_uk_next[k] + (0.5*_B_uk[k]*_dx_uk[k])
+                                *(_H_j_next[_J_uk[k]] - _H_j_prev[_J_uk[k]])/_dt)
+        _Q_uk_dn_next[k] = (_Q_uk_next[k] - (0.5*_B_uk[k]*_dx_uk[k])
+                                *(_h_Ik_next[_I_1k[k]] - _h_Ik_prev[_I_1k[k]])/_dt)
+        # Calculate the cross-sectional area of upstream boundary links
+        if _geom_codes[0] ==1:
+            d = _g1_ik[k]
+            y = 0.5*(_H_j_next[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_next[_I_1k[k]])
+            if y < 0:
+                y = 0.0
+            elif y > d:
+                y = d
+            r = d / 2
+            phi = y / r
+            if phi < 0:
+                phi = 0
+            elif phi > 2:
+                phi = 2
+            theta = np.arccos(1 - phi)
+            _A_uk_next[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
             
-            # Calculate the cross-sectional area of downstream boundary links
-            if _geom_codes[0] ==1:
-                d = _g1_ik[k]
-                y = 0.5*(_H_j_next[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_next[im1])
-                if y < 0:
-                    y = 0.0
-                elif y > d:
-                    y = d
-                r = d / 2
-                phi = y / r
-                if phi < 0:
-                    phi = 0
-                elif phi > 2:
-                    phi = 2
-                theta = np.arccos(1 - phi)
-                _A_dk_next[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
-                y = 0.5*(_H_j_prev[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_prev[im1])
-                if y < 0:
-                    y = 0.0
-                elif y > d:
-                    y = d
-                r = d / 2
-                phi = y / r
-                if phi < 0:
-                    phi = 0
-                elif phi > 2:
-                    phi = 2
-                theta = np.arccos(1 - phi)
-                _A_dk_prev[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
-            elif _geom_codes[0] ==3:
-                _A_dk_next[k] = (_B_dk[k]*0.5*(_H_j_next[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_next[im1]))
-                _A_dk_prev[k] = (_B_dk[k]*0.5*(_H_j_prev[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_prev[im1]))
-            else:
-                raise ValueError('Geometries of conduit should be [circular] or [rect_open] in this version of WQ solver.')
+            y = 0.5*(_H_j_prev[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_prev[_I_1k[k]])
+            if y < 0:
+                y = 0.0
+            elif y > d:
+                y = d
+            r = d / 2
+            phi = y / r
+            if phi < 0:
+                phi = 0
+            elif phi > 2:
+                phi = 2
+            theta = np.arccos(1 - phi)
+            _A_uk_prev[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
+        elif _geom_codes[0] ==3:
+            _A_uk_next[k] = (_B_uk[k]*0.5*(_H_j_next[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_next[_I_1k[k]]))
+            _A_uk_prev[k] = (_B_uk[k]*0.5*(_H_j_prev[_J_uk[k]] - _z_inv_j[_J_uk[k]] + _h_Ik_prev[_I_1k[k]]))
         else:
-            pass
+            raise ValueError('Geometries of conduit should be [circular] or [rect_open] in this version of WQ solver.')
+            
+        _Q_dk_up_next[k] = (_Q_dk_next[k] + (0.5*_B_dk[k]*_dx_dk[k])
+                              *(_h_Ik_next[_I_Np1k[k]] - _h_Ik_prev[_I_Np1k[k]])/_dt)
+        _Q_dk_dn_next[k] = (_Q_dk_next[k] - (0.5*_B_dk[k]*_dx_dk[k])
+                                *(_H_j_next[_J_dk[k]] - _H_j_prev[_J_dk[k]])/_dt)
+        
+        # Calculate the cross-sectional area of downstream boundary links
+        if _geom_codes[0] ==1:
+            d = _g1_ik[k]
+            y = 0.5*(_H_j_next[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_next[_I_Np1k[k]])
+            if y < 0:
+                y = 0.0
+            elif y > d:
+                y = d
+            r = d / 2
+            phi = y / r
+            if phi < 0:
+                phi = 0
+            elif phi > 2:
+                phi = 2
+            theta = np.arccos(1 - phi)
+            _A_dk_next[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
+            y = 0.5*(_H_j_prev[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_prev[_I_Np1k[k]])
+            if y < 0:
+                y = 0.0
+            elif y > d:
+                y = d
+            r = d / 2
+            phi = y / r
+            if phi < 0:
+                phi = 0
+            elif phi > 2:
+                phi = 2
+            theta = np.arccos(1 - phi)
+            _A_dk_prev[k] = r**2 * (theta - np.cos(theta) * np.sin(theta))
+        elif _geom_codes[0] ==3:
+            _A_dk_next[k] = (_B_dk[k]*0.5*(_H_j_next[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_next[_I_Np1k[k]]))
+            _A_dk_prev[k] = (_B_dk[k]*0.5*(_H_j_prev[_J_dk[k]] - _z_inv_j[_J_dk[k]] + _h_Ik_prev[_I_Np1k[k]]))
+        else:
+            raise ValueError('Geometries of conduit should be [circular] or [rect_open] in this version of WQ solver.')
+
     return _Q_uk_up_next, _Q_uk_dn_next, _Q_dk_up_next, _Q_dk_dn_next, _A_uk_next, _A_uk_prev, _A_dk_next, _A_dk_prev
 
 @njit
