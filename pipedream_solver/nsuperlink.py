@@ -2970,7 +2970,10 @@ def numba_reposition_junctions(_x_Ik, _z_inv_Ik, _h_Ik, _dx_ik, _Q_ik, _H_dk,
             move_junction = (_H_d > _z_inv_Np1) & (_H_d < _z_inv_1)
             if move_junction:
                 z_m = _H_d
-                _x0 = _x_I[_I_1]
+                #_x0 = _x_I[_I_1]   
+                # (note) If internals have the same numbers like the previous code, no problem. 
+                # However, if internals are varying, this should be changed as follows.
+                _x0 = _x_I[0]
                 x_m = (_H_d - _b0[k]) / _m[k] + _x0
             else:
                 z_m = _zc[k]
