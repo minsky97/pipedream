@@ -12,7 +12,7 @@ class WQ_reaction():
         self.gravity = 9.81
         self.K_CO2 = 0.00
         self.K_SOD = 0.00
-        self.CO2_air = 0.5   # We need a conversion factor between concentration of CO2 in air and DIC in water
+        self.CO2_air = 0.0   # We need a conversion factor between concentration of CO2 in air and DIC in water
 
         self.K_LDOC = 0.000
         self.K_LPOC = 0.00
@@ -117,10 +117,10 @@ class WQ_reaction():
         self.delta_P_ALG3_am = 1.1
         self.delta_P_ALG4_am = 1.1
         
-        self.delta_P_ALG1_ag = 1.4
-        self.delta_P_ALG2_ag = 1.4
-        self.delta_P_ALG3_ag = 1.4
-        self.delta_P_ALG4_ag = 1.4
+        self.delta_P_ALG1_ag = 0.05
+        self.delta_P_ALG2_ag = 0.05
+        self.delta_P_ALG3_ag = 0.05
+        self.delta_P_ALG4_ag = 0.05
 
         self.delta_P_ALG1_ar = 1.1
         self.delta_P_ALG2_ar = 1.1
@@ -188,25 +188,25 @@ class WQ_reaction():
         self.T2_NO3 = 25
         self.gamma_NO3_1 = (1/(self.T2_NO3 - self.T1_NO3))*np.log((self.K2_NO3*(1-self.K1_NO3))/(self.K1_NO3*(1-self.K2_NO3)))
         
-        self.K_ag_max_ALG1 = 0.0
+        self.K_ag_max_ALG1 = 0.5
         self.K_ar_max_ALG1 = 0.0
         self.K_am_max_ALG1 = 0.0
-        self.K_ae_max_ALG1 = 0.0
+        self.K_ae_max_ALG1 = 0.02
 
-        self.K_ag_max_ALG2 = 0.0
+        self.K_ag_max_ALG2 = 0.3
         self.K_ar_max_ALG2 = 0.0
         self.K_am_max_ALG2 = 0.0
-        self.K_ae_max_ALG2 = 0.0
+        self.K_ae_max_ALG2 = 0.02
 
-        self.K_ag_max_ALG3 = 0.0
+        self.K_ag_max_ALG3 = 0.7
         self.K_ar_max_ALG3 = 0.0
         self.K_am_max_ALG3 = 0.0
-        self.K_ae_max_ALG3 = 0.0
+        self.K_ae_max_ALG3 = 0.02
 
-        self.K_ag_max_ALG4 = 0.0
+        self.K_ag_max_ALG4 = 0.4
         self.K_ar_max_ALG4 = 0.0
         self.K_am_max_ALG4 = 0.0
-        self.K_ae_max_ALG4 = 0.0
+        self.K_ae_max_ALG4 = 0.02
 
         self.K1_ALG1 = 0.05
         self.K2_ALG1 = 0.99
@@ -269,8 +269,8 @@ class WQ_reaction():
         
     def initial_value(self):
         WQ_ini = {}
-        WQ_ini['Temp'] = 24.5
-        WQ_ini['DO'] = 8.3
+        WQ_ini['Temp'] = 24.0
+        WQ_ini['DO'] = 8.0
         WQ_ini['DIC'] = 0.5
         WQ_ini['LDOC'] = 0.5
         WQ_ini['LPOC'] = 0.6
@@ -285,7 +285,7 @@ class WQ_reaction():
         WQ_ini['RPON'] = 0.005
         WQ_ini['PIP'] = 0.011
         WQ_ini['PO4'] = 0.025
-        WQ_ini['LDOP'] = 0.01
+        WQ_ini['LDOP'] = 0.02
         WQ_ini['LPOP'] = 0.015
         WQ_ini['RDOP'] = 0.005
         WQ_ini['RPOP'] = 0.05
@@ -293,7 +293,7 @@ class WQ_reaction():
         WQ_ini['ALG2'] = 0.3
         WQ_ini['ALG3'] = 0.05
         WQ_ini['ALG4'] = 0.02
-        WQ_ini['ISS'] = 0.01
+        WQ_ini['ISS'] = 10.0
         return WQ_ini
         
     def calc_hyd_para(self, dt, name, WQ):
@@ -328,9 +328,10 @@ class WQ_reaction():
         ###################################################################
         #   Temperature
         ###################################################################
+        
         C_new['Temp'] = RK4_Temp(dt, C_all['Temp'], MET_solar[T], 
                    MET_atemp[T],MET_dtemp[T], MET_windspd[T], self.T_si, H_dep)
-        
+       
         # Temperature multipilers : SHOULD BE MOVED TO the wq_reaction.py FILE
         gamma_OC = ( (self.K1_OC*np.exp(self.gamma_OC_1*(C_all['Temp']-self.T1_OC))) 
                     /(1+self.K1_OC*np.exp(self.gamma_OC_1*(C_all['Temp']-self.T1_OC))-self.K1_OC) )
