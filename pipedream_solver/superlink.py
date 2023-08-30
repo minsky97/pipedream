@@ -8,6 +8,8 @@ import scipy.sparse.linalg
 import pipedream_solver.geometry
 import pipedream_solver.storage
 import pipedream_solver.visualization
+from numba import njit, prange
+from numba.types import float64, int64, uint32, uint16, uint8, boolean, UniTuple, Tuple, List, DictType, void
 
 class SuperLink():
     """
@@ -373,14 +375,15 @@ class SuperLink():
         self._J_dk = self.superlinks['sj_1'].values.astype(np.int64)
         in_offset = superlinks['in_offset'].values.astype(np.float64)
         out_offset = superlinks['out_offset'].values.astype(np.float64)
+        self.internal_links_k = superlinks['internal_links_k'].values.astype(np.int64)   # ★★ for varying internal numbers
         self._z_inv_uk = self._z_inv_j[self._J_uk] + in_offset
         self._z_inv_dk = self._z_inv_j[self._J_dk] + out_offset
         # If internal links and junctions are not provided, create them
         self.mobile_elements = mobile_elements
         if (links is None) or (junctions is None):
             generate_elems = True
-            self._configure_internals_variable(internal_links=internal_links,
-                                               mobile_elements=mobile_elements)
+            #self._configure_internals_variable(internal_links=internal_links, mobile_elements=mobile_elements)
+            self._configure_internals_variable_new(internal_links=internal_links, mobile_elements=mobile_elements)
             links = self.links
             junctions = self.junctions
         else:
@@ -495,8 +498,11 @@ class SuperLink():
         self._S_o_ik = ((self._z_inv_Ik[self._Ik] - self._z_inv_Ik[self._Ip1k])
                         / self._dx_ik)
         self._x_Ik = np.zeros(self._I.size, dtype=np.float64)
-        self._x_Ik[~self._is_start] = links.groupby('k')['dx'].cumsum().values + self._dx_uk[self._ki]
-        self._x_Ik[self._is_start] = self._dx_uk
+        self._x_Ik[~self._is_start] = links.groupby('k')['dx'].cumsum().values
+        self._x_Ik[self._is_start] = 0
+        
+        #self._x_Ik[~self._is_start] = links.groupby('k')['dx'].cumsum().values + self._dx_uk[self._ki]
+        #self._x_Ik[self._is_start] = self._dx_uk
         # TODO: Allow specifying initial flows
         self._Q_0Ik = np.zeros(self._I.size, dtype=np.float64)
         # Handle orifices
@@ -1117,6 +1123,212 @@ class SuperLink():
         self._m = _m
         self._xc = _xc
         self._zc = _zc
+    
+    def _configure_internals_variable_new(self, internal_links=None, mobile_elements=False):
+        print("Varying numbers of internal link and mobile element are applied.")
+        # Import instance variables
+        superlinks = self.superlinks            # Table of superlinks
+        superjunctions = self.superjunctions    # Table of superjunctions
+        # Set parameters
+        njunctions = superlinks['internal_links_k'].values + 1
+        nlinks = njunctions - 1
+        link_columns = ['A_c', 'C', 'Q_0', 'ctrl', 'dx', 'g1', 'g2', 'g3',
+                         'g4', 'g5', 'g6', 'g7', 'id', 'j_0', 'j_1', 'k', 'n',
+                        'shape', 'friction_method']
+        junction_columns = ['A_s', 'h_0', 'id', 'k', 'z_inv']
+        link_ncols = len(link_columns)
+        junction_ncols = len(junction_columns)
+        n_superlinks = len(superlinks)
+        #NJ = njunctions * n_superlinks
+        NJ = sum(njunctions)
+        NL = sum(nlinks)
+        #elems = np.repeat(internal_links, n_superlinks)
+        elems = nlinks
+        total_elems = elems + 1
+        upstream_nodes = np.cumsum(total_elems) - total_elems
+        downstream_nodes = np.cumsum(total_elems) - 2
+        # Configure links
+        links = pd.DataFrame(np.zeros((NL, link_ncols)))
+        links.columns = link_columns
+        links_A_c = []
+        links_C = []
+        links_Q_0 = []
+        links_ctrl = []
+        links_k = []
+        links_shape = []
+        links_roughness = []
+        links_friction_method = []
+        for i in range(n_superlinks):
+            for j in range(nlinks[i]):
+                links_A_c.append(superlinks['A_c'].values[i])
+                links_C.append(superlinks['C'].values[i])
+                links_Q_0.append(superlinks['Q_0'].values[i])
+                links_ctrl.append(superlinks['ctrl'].values[i])
+                links_k.append(superlinks.index.values[i])
+                links_shape.append(superlinks['shape'].values[i])
+                links_roughness.append(superlinks['roughness'].values[i])
+                links_friction_method.append(superlinks['friction_method'].values[i])
+        links['A_c'] = links_A_c
+        links['C'] = links_C
+        links['Q_0'] = links_Q_0
+        links['ctrl'] = links_ctrl
+        links['k'] = links_k
+        links['shape'] = links_shape
+        links['roughness'] = links_roughness
+        links['friction_method'] = links_friction_method
+        links['id'] = links.index.values
+        j = np.arange(NJ)
+        links_j_0 = np.delete(j, downstream_nodes +1)
+        links_j_1 = np.delete(j, upstream_nodes)
+        links['j_0'] = links_j_0
+        links['j_1'] = links_j_1
+        links_g1 = []
+        links_g2 = []
+        links_g3 = []
+        links_g4 = []
+        links_g5 = []
+        links_g6 = []
+        links_g7 = []
+        if f'g{1}' in superlinks.columns:
+            for i in range(n_superlinks):
+                for j in range(nlinks[i]):
+                    links_g1.append(superlinks['g1'].values[i])
+            links['g1'] = links_g1
+        else:
+            pass
+        if f'g{2}' in superlinks.columns:
+            for i in range(n_superlinks):
+                for j in range(nlinks[i]):
+                    links_g2.append(superlinks['g2'].values[i])
+            links['g2'] = links_g2
+        else:
+            pass
+        if f'g{3}' in superlinks.columns:
+            for i in range(n_superlinks):
+                for j in range(nlinks[i]):
+                    links_g3.append(superlinks['g3'].values[i])
+            links['g3'] = links_g3
+        else:
+            pass
+        if f'g{4}' in superlinks.columns:
+            for i in range(n_superlinks):
+                for j in range(nlinks[i]):
+                    links_g4.append(superlinks['g4'].values[i])
+            links['g4'] = links_g4
+        else:
+            pass
+        if f'g{5}' in superlinks.columns:
+            for i in range(n_superlinks):
+                for j in range(nlinks[i]):
+                    links_g5.append(superlinks['g5'].values[i])
+            links['g5'] = links_g5
+        else:
+            pass
+        if f'g{6}' in superlinks.columns:
+            for i in range(n_superlinks):
+                for j in range(nlinks[i]):
+                    links_g6.append(superlinks['g6'].values[i])
+            links['g6'] = links_g6
+        else:
+            pass
+        if f'g{7}' in superlinks.columns:
+            for i in range(n_superlinks):
+                for j in range(nlinks[i]):
+                    links_g7.append(superlinks['g7'].values[i])
+            links['g7'] = links_g7
+        else:
+            pass
+        # Configure junctions
+        junctions = pd.DataFrame(np.zeros((NJ, junction_ncols)))
+        junctions.columns = junction_columns
+        junctions_A_s = []
+        junctions_h_0 = []
+        junctions_k = []
+        for i in range(n_superlinks):
+            for j in range(njunctions[i]):
+                junctions_A_s.append(superlinks['A_s'].values[i])
+                junctions_h_0.append(superlinks['h_0'].values[i])
+                junctions_k.append(superlinks.index.values[i])
+        junctions['A_s'] = junctions_A_s
+        junctions['h_0'] = junctions_h_0
+        junctions['k'] = junctions_k
+        junctions['id'] = junctions.index.values
+        # Configure internal variables
+        dx_j = superlinks['dx'].values
+        _z_inv_uk = self._z_inv_uk
+        _z_inv_dk = self._z_inv_dk
+        _dx_uk = self._dx_uk
+        _dx_dk = self._dx_dk
+        # TODO: Should dx_uk, dx_dk be generated instead? Probably no, because then orifice cannot be represented.
+        _m = (_z_inv_dk - _z_inv_uk) / (dx_j + _dx_uk + _dx_dk)
+        _b0 = _z_inv_uk + _m * _dx_uk
+        _b1 = _z_inv_dk - _m * _dx_dk
+
+        _xc = np.zeros(len(nlinks))
+        _elem_pos = np.zeros(len(nlinks), dtype = int)
+        _elem_pos = np.int64(_elem_pos)
+        internal_links = min(nlinks)
+        if mobile_elements:
+            try:
+                assert (internal_links > 1)
+            except:
+                raise ValueError('If using mobile elements, must have more than one internal link.')
+            # variables : njunctions, _xc, dx_j, _elem_pos, nlinks, _m, _b0, _zc   / return : _xc, _zx, _elem_pos
+            for i in range(len(njunctions)):
+                if (njunctions[i] % 2):
+                    _xc[i] = (dx_j[i] / 2)
+                    _elem_pos[i] = int(nlinks[i]/2)
+                else:
+                    _xc[i] = (dx_j[i] / 2) + (dx_j[i] / nlinks[i] / 2)
+                    _elem_pos[i] = int(nlinks[i]/2 + 0.5)
+            _zc = _m * _xc + _b0
+        else:
+            raise ValueError('In this method, mobile elements should be applied. (mobile_element = true)')
+            _xc = None
+            _zc = None
+            c = None
+            
+        # Set start and end junctions on superlinks
+        superlinks['j_0'] = links.groupby('k')['j_0'].min()
+        superlinks['j_1'] = links.groupby('k')['j_1'].max()
+
+        links_dx_new = []
+        junctions_z_inv = []
+        for i in range(n_superlinks):
+            for j in range(nlinks[i]):
+                if j < _elem_pos[i]-1:
+                    links_dx_new.append(superlinks['dx'].values[i]/(nlinks[i]-1))
+                elif j == _elem_pos[i]-1:
+                    links_dx_new.append(superlinks['dx'].values[i]/(nlinks[i]-1)/2)
+                elif j == _elem_pos[i]:
+                    links_dx_new.append(superlinks['dx'].values[i]/(nlinks[i]-1)/2)
+                else:
+                    links_dx_new.append(superlinks['dx'].values[i]/(nlinks[i]-1))
+        for i in range(n_superlinks):
+            for j in range(njunctions[i]):
+                if j < _elem_pos[i]:
+                    junctions_z_inv.append(_b0[i] + j*_m[i]*superlinks['dx'].values[i]/(nlinks[i]-1))
+                elif j == _elem_pos[i]:
+                    junctions_z_inv.append(_b0[i] + (j-0.5)*_m[i]*superlinks['dx'].values[i]/(nlinks[i]-1))
+                else:
+                    junctions_z_inv.append(_b0[i] + (j-1)*_m[i]*superlinks['dx'].values[i]/(nlinks[i]-1))
+        links['dx'] = links_dx_new
+        junctions['z_inv'] = junctions_z_inv
+        
+        # Set start and end junctions on superlinks
+        superlinks['j_0'] = links.groupby('k')['j_0'].min()
+        superlinks['j_1'] = links.groupby('k')['j_1'].max()
+       
+        # Export instance variables
+        self.junctions = junctions
+        self.links = links
+        self.superlinks = superlinks
+        self._elem_pos = _elem_pos
+        self._b0 = _b0
+        self._b1 = _b1
+        self._m = _m
+        self._xc = _xc
+        self._zc = _zc    
 
     def safe_divide(function):
         """
